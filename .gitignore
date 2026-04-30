@@ -1,0 +1,39 @@
+# --- Node.js / Frontend ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.env
+
+# --- Capacitor ---
+www/
+
+# --- Android ---
+.gradle/
+local.properties
+.navigation/
+captures/
+*.ap_
+*.apk
+*.dex
+native-libs/
+
+# 忽略 Android 编译输出
+**/build/
+**/debug/
+**/release/
+
+# --- IDE (Android Studio / VS Code / IntelliJ) ---
+.idea/
+*.iml
+*.iws
+.vscode/
+.DS_Store
+
+# --- Linux / Arch Linux Specific ---
+*~
+.fuse_hidden*
+.directory
+.Trash-*
