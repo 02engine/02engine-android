@@ -61,7 +61,7 @@ jobs:
     - name: Setup Release Signing
       run: |
         if [ -n "$KEYSTORE_BASE64" ]; then
-          cd android
+          cd android/app
           echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
         fi
       env:
