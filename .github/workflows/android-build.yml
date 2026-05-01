@@ -17,7 +17,20 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
+    - name: Fetch scratch-gui assets
+      run: |
+        echo "Fetching assets from 02engine/scratch-gui:cf-pages..."
+        # 深度克隆分支到临时目录
+        git clone --depth 1 --branch cf-pages https://github.com/02engine/scratch-gui.git temp_assets
+        # 确保 www 目录存在
+        mkdir -p www
+        # 将所有资产同步到 www 目录（排除 .git 目录）
+        rsync -av --exclude='.git/' temp_assets/ www/
+        # 清理临时目录
+        rm -rf temp_assets
+        echo "Assets synchronized to www/"
+
     - name: Setup Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
@@ -49,6 +62,7 @@ jobs:
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
+    # 此时 npx cap sync 会将刚才拉取到 www 的内容同步到 Android 项目中
     - name: Build Capacitor Android
       run: npx cap sync android
     
