@@ -1,40 +1,44 @@
 name: Android Build
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  repository_dispatch:
+    types: [publish-android]  # 接收触发事件
+  workflow_dispatch:          # 保留手动触发用于调试
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        node-version: [22.x]
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 1. 提取并处理 Tag
+    - name: Prepare Version String
+      id: prep
+      run: |
+        # 获取 client_payload 中的 tag，如果没有则设定一个 fallback 值
+        RAW_TAG="${{ github.event.client_payload.tag }}"
+        if [ -z "$RAW_TAG" ]; then RAW_TAG="v0.0.0"; fi
+        
+        # 去掉开头的 v
+        CLEAN_TAG="${RAW_TAG#v}"
+        
+        echo "clean_tag=$CLEAN_TAG" >> $GITHUB_OUTPUT
+        echo "raw_tag=$RAW_TAG" >> $GITHUB_OUTPUT
+        echo "Processing version: $RAW_TAG -> $CLEAN_TAG"
+
     - name: Fetch scratch-gui assets
       run: |
-        echo "Fetching assets from 02engine/scratch-gui:cf-page..."
-        # 深度克隆分支到临时目录
         git clone --depth 1 --branch cf-page https://github.com/02engine/scratch-gui.git temp_assets
-        # 确保 www 目录存在
         mkdir -p www
-        # 将所有资产同步到 www 目录（排除 .git 目录）
         rsync -av --exclude='.git/' temp_assets/ www/
-        # 清理临时目录
         rm -rf temp_assets
-        echo "Assets synchronized to www/"
 
-    - name: Setup Node.js ${{ matrix.node-version }}
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: 22
         cache: 'npm'
 
     - name: set up JDK 21
@@ -44,16 +48,6 @@ jobs:
         distribution: 'temurin'
         cache: 'gradle'
 
-    - name: Cache Gradle
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-    
     - name: Install npm dependencies
       run: npm ci
     
@@ -62,15 +56,8 @@ jobs:
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-    # 此时 npx cap sync 会将刚才拉取到 www 的内容同步到 Android 项目中
     - name: Build Capacitor Android
       run: npx cap sync android
-    
-    - name: Build Debug APK
-      working-directory: android
-      run: |
-        chmod +x gradlew
-        ./gradlew assembleDebug
     
     - name: Setup Release Signing
       run: |
@@ -97,24 +84,31 @@ jobs:
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-    
-    - name: Upload Debug APK
+
+    # 2. 重命名 APK
+    - name: Rename APK
+      run: |
+        OLD_PATH="android/app/build/outputs/apk/release/app-release.apk"
+        NEW_NAME="02Engine-Android-${{ steps.prep.outputs.clean_tag }}.apk"
+        mv "$OLD_PATH" "$NEW_NAME"
+        echo "renamed_path=$NEW_NAME" >> $GITHUB_OUTPUT
+        echo "apk_name=$NEW_NAME" >> $GITHUB_OUTPUT
+      id: rename
+
+    # 3. 上传到 02engine/desktop 的 Release 中
+    - name: Upload APK to Desktop Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.ORG_DISPATCH_TOKEN }} # 需要有对 desktop 仓库写权限的 Token
+        repo_name: 02engine/desktop                  # 目标仓库
+        file: ${{ steps.rename.outputs.apk_name }}   # 重命名后的文件
+        asset_name: ${{ steps.rename.outputs.apk_name }}
+        tag: ${{ steps.prep.outputs.raw_tag }}       # 指定上传到哪个 Tag 下（带v的原始tag）
+        overwrite: true
+
+    - name: Upload Artifact (Backup)
       uses: actions/upload-artifact@v4
       with:
-        name: debug-apk
-        path: android/app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 30
-    
-    - name: Upload Release APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-apk
-        path: android/app/build/outputs/apk/release/app-release.apk
-        retention-days: 30
-    
-    - name: Upload AAB (Release)
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-aab
-        path: android/app/build/outputs/bundle/release/app-release.aab
-        retention-days: 30
+        name: 02engine-android-apk
+        path: ${{ steps.rename.outputs.apk_name }}
+        retention-days: 7
