@@ -1,0 +1,139 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [22.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Cache Gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Cache Android SDK
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/android-sdk
+          ~/android-sdk/cmdline-tools
+          ~/android-sdk/platforms
+          ~/android-sdk/build-tools
+        key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/variables.gradle') }}
+        restore-keys: |
+          ${{ runner.os }}-android-sdk-
+    
+    - name: Install npm dependencies
+      run: npm ci
+    
+    - name: Setup Android SDK
+      run: |
+        if [ ! -d "$HOME/android-sdk/cmdline-tools" ]; then
+          mkdir -p "$HOME/android-sdk"
+          cd "$HOME/android-sdk"
+          
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/{cmdline-tools,bin,lib,NOTICE.txt,source.properties} cmdline-tools/latest/ 2>/dev/null || true
+          rm cmdline-tools.zip
+        fi
+        
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        
+        yes | sdkmanager --licenses 2>/dev/null || true
+        sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+    
+    - name: Build Capacitor Android
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        export ANDROID_HOME=$HOME/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        
+        npx cap sync android
+    
+    - name: Build Debug APK
+      working-directory: android
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        export ANDROID_HOME=$HOME/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        
+        chmod +x gradlew
+        ./gradlew assembleDebug
+    
+    - name: Setup Release Signing
+      run: |
+        if [ -n "$KEYSTORE_BASE64" ]; then
+          cd android
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+        fi
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+    
+    - name: Build Release APK
+      working-directory: android
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/android-sdk
+        export ANDROID_HOME=$HOME/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        
+        chmod +x gradlew
+        
+        if [ -n "$KEYSTORE_PASSWORD" ]; then
+          ./gradlew assembleRelease \
+            -PKEYSTORE_PASSWORD="$KEYSTORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD"
+        else
+          ./gradlew assembleRelease
+        fi
+      env:
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+    
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-apk
+        path: android/app/build/outputs/apk/release/app-release.apk
+        retention-days: 30
+    
+    - name: Upload AAB (Release)
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-aab
+        path: android/app/build/outputs/bundle/release/app-release.aab
+        retention-days: 30

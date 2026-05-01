@@ -19,6 +19,7 @@ captures/
 *.apk
 *.dex
 native-libs/
+key/
 
 # 忽略 Android 编译输出
 **/build/
