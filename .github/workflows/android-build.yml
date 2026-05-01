@@ -23,7 +23,14 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-    
+
+    - name: set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle'
+
     - name: Cache Gradle
       uses: actions/cache@v4
       with:
@@ -34,55 +41,20 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
     
-    - name: Cache Android SDK
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/android-sdk
-          ~/android-sdk/cmdline-tools
-          ~/android-sdk/platforms
-          ~/android-sdk/build-tools
-        key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/variables.gradle') }}
-        restore-keys: |
-          ${{ runner.os }}-android-sdk-
-    
     - name: Install npm dependencies
       run: npm ci
     
     - name: Setup Android SDK
       run: |
-        if [ ! -d "$HOME/android-sdk/cmdline-tools" ]; then
-          mkdir -p "$HOME/android-sdk"
-          cd "$HOME/android-sdk"
-          
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/{cmdline-tools,bin,lib,NOTICE.txt,source.properties} cmdline-tools/latest/ 2>/dev/null || true
-          rm cmdline-tools.zip
-        fi
-        
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-        
-        yes | sdkmanager --licenses 2>/dev/null || true
-        sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-    
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
     - name: Build Capacitor Android
-      run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-        
-        npx cap sync android
+      run: npx cap sync android
     
     - name: Build Debug APK
       working-directory: android
       run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-        
         chmod +x gradlew
         ./gradlew assembleDebug
     
@@ -98,12 +70,7 @@ jobs:
     - name: Build Release APK
       working-directory: android
       run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-        
         chmod +x gradlew
-        
         if [ -n "$KEYSTORE_PASSWORD" ]; then
           ./gradlew assembleRelease \
             -PKEYSTORE_PASSWORD="$KEYSTORE_PASSWORD" \
