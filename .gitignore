@@ -7,9 +7,6 @@ dist/
 build/
 .env
 
-# --- Capacitor ---
-www/
-
 # --- Android ---
 .gradle/
 local.properties

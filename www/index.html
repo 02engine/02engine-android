@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <!-- 初始视口，viewport-fit=cover 确保内容延伸至刘海区域 -->
+    <meta name="viewport" id="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="google" value="notranslate">
+    <meta name="description" content="02Engine is a Scratch mod with a compiler to run projects faster, dark mode for your eyes, a bunch of addons to improve the editor, and more." />
+    <title>02Engine - Run Scratch projects faster</title>
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    
+    <style>
+      /* 强制锁定容器，严禁任何滚动和溢出 */
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden !important;
+        background-color: #333; /* 匹配 02Engine 深色主题 */
+        position: fixed;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        visibility: hidden; /* 计算完成前保持隐藏，避免视觉闪烁 */
+      }
+
+      /* Splash Screen 样式保持原有逻辑 */
+      .splash-screen {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        z-index: 9999;
+      }
+      .splash-screen[hidden] { display: none; }
+      .splash-screen[data-theme="dark"] { background-color: #333; color: white; }
+      .splash-spinner:after {
+        content: " ";
+        display: block;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        border: 6px solid;
+        border-color: currentColor transparent currentColor transparent;
+        animation: splash-spinner 1.2s linear infinite;
+      }
+      @keyframes splash-spinner {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .splash-reset { color: inherit; text-decoration: underline; cursor: pointer; background: none; border: none; }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <div class="splash-screen">
+        <h1>02Engine requires JavaScript</h1>
+      </div>
+    </noscript>
+
+    <div class="splash-screen spash-waiting-for-js" hidden>
+      <div class="splash-spinner"></div>
+      <div class="splash-reset" hidden>Click here to reset caches</div>
+    </div>
+
+    <!-- 核心适配脚本 -->
+    <script>
+      (function () {
+        'use strict';
+
+        // 核心：单次计算函数，彻底杜绝 Resize Loop
+        function initViewportScaling() {
+          const vp = document.getElementById('viewport');
+          const app = document.getElementById('app');
+          if (!vp || !app) return;
+
+          // 1. 直接获取屏幕的物理尺寸，不再依赖 window.innerHeight
+          // 横屏模式下，width 应该是大值，height 是小值
+          const screenW = Math.max(window.screen.width, window.screen.height);
+          const screenH = Math.min(window.screen.width, window.screen.height);
+
+          // 2. 以 02Engine 1.2.7 的标准高度 720px 为基准
+          const designHeight = 720;
+          const scale = screenH / designHeight;
+          
+          // 3. 计算适配当前屏幕比例的逻辑宽度
+          const logicalWidth = screenW / scale;
+
+          // 4. 强制覆盖 Viewport 设置，并锁定 initial-scale
+          // 这里的缩放由系统底层 WebView 完成，拖拽坐标映射会完全准确
+          const content = [
+            `width=${logicalWidth}`,
+            `initial-scale=${scale}`,
+            `minimum-scale=${scale}`,
+            `maximum-scale=${scale}`,
+            'user-scalable=no',
+            'viewport-fit=cover'
+          ].join(', ');
+
+          vp.setAttribute('content', content);
+          
+          // 5. 显示应用内容
+          app.style.visibility = 'visible';
+        }
+
+        // 页面初始化时运行一次
+        initViewportScaling();
+
+        // 02Engine 主题与加载逻辑
+        var theme = '';
+        var accent = '#00baad';
+        try {
+          var themeSetting = localStorage.getItem('tw:theme');
+          if (themeSetting === 'light' || themeSetting === 'dark') {
+            theme = themeSetting;
+          } else if (themeSetting) {
+            var parsed = JSON.parse(themeSetting);
+            if (parsed.accent === 'purple') accent = '#855cd6';
+            else if (parsed.accent === 'blue') accent = '#4c97ff';
+            theme = parsed.gui || '';
+          }
+        } catch (e) {}
+
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        var splash = document.querySelector('.spash-waiting-for-js');
+        splash.setAttribute('data-theme', theme);
+        if (theme !== 'dark') {
+          splash.style.backgroundColor = accent;
+          splash.style.color = 'white';
+        }
+        splash.hidden = false;
+
+        // 当 Scratch 引擎准备好移除 Splash 时
+        window.SplashEnd = () => {
+          splash.hidden = true;
+          // 再次确保视口正确（部分安卓机型在启动瞬间获取尺寸不准）
+          initViewportScaling(); 
+        };
+
+        var splashReset = document.querySelector('.splash-reset');
+        splashReset.onclick = function () {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistration("").then(r => {
+              if (r) r.unregister();
+              location.reload();
+            });
+          } else { location.reload(); }
+        };
+      })();
+    </script>
+
+    <div id="app"></div>
+    
+    <!-- 02Engine 构建资源 -->
+    <script src="js/vendors~addon-settings~credits~editor~embed~fullscreen~player.js"></script>
+    <script src="js/vendors~addon-settings~editor~embed~fullscreen~player.js"></script>
+    <script src="js/vendors~editor~embed~fullscreen~player.js"></script>
+    <script src="js/addon-settings~addons~editor~fullscreen~player.js"></script>
+    <script src="js/editor.js"></script>
+  </body>
+</html>
