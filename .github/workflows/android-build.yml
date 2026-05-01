@@ -20,9 +20,9 @@ jobs:
 
     - name: Fetch scratch-gui assets
       run: |
-        echo "Fetching assets from 02engine/scratch-gui:cf-pages..."
+        echo "Fetching assets from 02engine/scratch-gui:cf-page..."
         # 深度克隆分支到临时目录
-        git clone --depth 1 --branch cf-pages https://github.com/02engine/scratch-gui.git temp_assets
+        git clone --depth 1 --branch cf-page https://github.com/02engine/scratch-gui.git temp_assets
         # 确保 www 目录存在
         mkdir -p www
         # 将所有资产同步到 www 目录（排除 .git 目录）
