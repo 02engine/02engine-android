@@ -40,8 +40,9 @@ jobs:
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
     - name: Build Android APK
-      working-directory: android
       run: |
+        npx cap sync android
+        cd android
         chmod +x gradlew
         ./gradlew assembleDebug
 
