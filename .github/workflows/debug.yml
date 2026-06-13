@@ -1,0 +1,63 @@
+name: Build Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Fetch scratch-gui assets
+      run: |
+        git clone --depth 1 --branch cf-page https://github.com/02engine/scratch-gui.git temp_assets
+        mkdir -p www
+        rsync -av --exclude='.git/' temp_assets/ www/
+        rm -rf temp_assets
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: 'npm'
+
+    - name: set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Install npm dependencies
+      run: npm ci
+    
+    - name: Setup Android SDK
+      run: |
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/latest/bin/sdkmanager --licenses || echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+    - name: Build Android APK
+      working-directory: android
+      run: |
+        chmod +x gradlew
+        ./gradlew assembleDebug
+
+    - name: Rename APK
+      run: |
+        OLD_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+        NEW_NAME="02Engine-Android-debug.apk"
+
+        
+        mv "$OLD_PATH" "$NEW_NAME"
+        echo "apk_name=$NEW_NAME" >> $GITHUB_OUTPUT
+      id: rename
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event_name == 'workflow_dispatch' && '02engine-android-debug-apk' || '02engine-android-release-apk' }}
+        path: ${{ steps.rename.outputs.apk_name }}
+        retention-days: 7
