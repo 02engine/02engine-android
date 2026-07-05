@@ -58,6 +58,18 @@ jobs:
 
     - name: Build Capacitor Android
       run: npx cap sync android
+
+    - name: Inject Version into Gradle
+      run: |
+        GRADLE_FILE="android/app/build.gradle"
+        
+        REAL_VERSION="${{ steps.prep.outputs.clean_tag }}"
+        REAL_CODE="${{ github.run_number }}"
+
+        sed -i "s/\<vercode\>/$REAL_CODE/g" $GRADLE_FILE
+        sed -i "s/\"ver\"/\"$REAL_VERSION\"/g" $GRADLE_FILE
+        
+        echo "成功将版本号注入 Gradle：VersionName -> $REAL_VERSION, VersionCode -> $REAL_CODE"
     
     - name: Setup Release Signing
       run: |

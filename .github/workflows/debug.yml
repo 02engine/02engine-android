@@ -41,7 +41,16 @@ jobs:
 
     - name: Build Android APK
       run: |
+        # 1. 先同步 Capacitor 配置与产物
         npx cap sync android
+        
+        GRADLE_FILE="android/app/build.gradle"
+
+        sed -i "s/\<vercode\>/999/g" $GRADLE_FILE
+        sed -i "s/\"ver\"/\"debug\"/g" $GRADLE_FILE
+        echo "成功将测试版版本号注入 Gradle：VersionName -> debug, VersionCode -> 999"
+        
+        # 2. 进入目录执行编译
         cd android
         chmod +x gradlew
         ./gradlew assembleDebug
@@ -50,7 +59,6 @@ jobs:
       run: |
         OLD_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
         NEW_NAME="02Engine-Android-debug.apk"
-
         
         mv "$OLD_PATH" "$NEW_NAME"
         echo "apk_name=$NEW_NAME" >> $GITHUB_OUTPUT
